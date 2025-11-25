@@ -1,11 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Em um ambiente de site estático (Render, Vercel, etc.), o código do navegador
-// não tem acesso seguro a variáveis de ambiente do servidor.
-// Portanto, a única forma robusta é ler a configuração salva no localStorage do navegador.
+// Função segura para ler variáveis de ambiente ou localStorage
+const getConfig = (key: string, storageKey: string) => {
+  // Tenta ler do process.env (seguro agora com o polyfill no index.html)
+  // ou do import.meta.env (padrão Vite)
+  const envVal = process.env[key] || (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]);
+  
+  if (envVal) return envVal;
+  
+  // Fallback para localStorage (configuração manual)
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(storageKey);
+  }
+  
+  return null;
+};
 
-const supabaseUrl = typeof window !== 'undefined' ? localStorage.getItem('sb_url') : null;
-const supabaseAnonKey = typeof window !== 'undefined' ? localStorage.getItem('sb_key') : null;
+const supabaseUrl = getConfig('SUPABASE_URL', 'sb_url');
+const supabaseAnonKey = getConfig('SUPABASE_ANON_KEY', 'sb_key');
 
 const isValidUrl = (u: string | null): u is string => {
   try {
@@ -17,8 +29,7 @@ const isValidUrl = (u: string | null): u is string => {
   }
 };
 
-// Se tivermos URL e Key válidas do localStorage, criamos o cliente.
-// Caso contrário, exportamos `null`. O App.tsx detectará isso e mostrará a tela de Setup.
+// Inicializa o cliente se houver credenciais
 export const supabase = isValidUrl(supabaseUrl) && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;

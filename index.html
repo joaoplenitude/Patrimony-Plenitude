@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PatrimonioAI - Gestão de Ativos</title>
+    <script>
+      // Polyfill para evitar crash 'process is not defined' em ambientes estáticos
+      if (typeof process === "undefined") {
+        window.process = { env: {} };
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
