@@ -67,14 +67,16 @@ function App() {
 
   // 1. Auth Setup
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Fix: Cast auth to any to bypass missing type definition for getSession
+    (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
       setSession(session);
       setIsLoadingSession(false);
     });
 
+    // Fix: Cast auth to any to bypass missing type definition for onAuthStateChange
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
       setSession(session);
     });
 
@@ -140,7 +142,8 @@ function App() {
   }, [session]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    // Fix: Cast auth to any to bypass missing type definition for signOut
+    await (supabase.auth as any).signOut();
   };
 
   const handleAddUser = async (e: React.FormEvent) => {

@@ -30,7 +30,8 @@ export const Login: React.FC = () => {
           throw new Error("Código de acesso administrativo inválido. Você não tem permissão para criar contas.");
         }
 
-        const { error } = await supabase.auth.signUp({
+        // Fix: Cast auth to any to bypass missing type definition for signUp
+        const { error } = await (supabase.auth as any).signUp({
           email,
           password,
         });
@@ -38,7 +39,8 @@ export const Login: React.FC = () => {
         setSuccessMessage('Conta criada com sucesso! Verifique seu e-mail para confirmar o cadastro.');
         setIsSignUp(false);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        // Fix: Cast auth to any to bypass missing type definition for signInWithPassword
+        const { error } = await (supabase.auth as any).signInWithPassword({
           email,
           password,
         });

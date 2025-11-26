@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Função segura para ler variáveis de ambiente ou localStorage
+// Função segura para ler configuração
 const getConfig = (key: string, storageKey: string) => {
-  // Tenta ler do process.env (seguro agora com o polyfill no index.html)
-  // ou do import.meta.env (padrão Vite)
-  const envVal = process.env[key] || (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]);
+  // 1. Tenta ler variáveis injetadas pelo Vite (define no vite.config.ts)
+  // O acesso direto via process.env.NOME_DA_VAR é necessário para a substituição funcionar
+  if (key === 'SUPABASE_URL' && process.env.SUPABASE_URL) return process.env.SUPABASE_URL;
+  if (key === 'SUPABASE_ANON_KEY' && process.env.SUPABASE_ANON_KEY) return process.env.SUPABASE_ANON_KEY;
   
+  // 2. Fallback para verificação genérica (caso não tenha sido substituído)
+  const envVal = process.env[key] || (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]);
   if (envVal) return envVal;
   
-  // Fallback para localStorage (configuração manual)
+  // 3. Fallback para localStorage (configuração manual via tela de Setup)
   if (typeof window !== 'undefined') {
     return localStorage.getItem(storageKey);
   }
