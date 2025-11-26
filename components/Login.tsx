@@ -11,9 +11,10 @@ export const Login: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Código secreto simples para evitar que estranhos criem contas
-  // Em produção real, isso seria validado via Edge Function, mas aqui já bloqueia bots e curiosos.
-  const MASTER_CODE = "ADMIN2024"; 
+  // Código secreto agora vem das variáveis de ambiente para maior segurança
+  // Se não estiver definido no Render, usa um fallback seguro que ninguém vai adivinhar facilmente,
+  // mas o ideal é configurar a variável ADMIN_CODE.
+  const MASTER_CODE = process.env.ADMIN_CODE || "SETUP_REQUIRED_CHECK_ENV"; 
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +28,7 @@ export const Login: React.FC = () => {
       if (isSignUp) {
         // Validação de segurança
         if (adminCode !== MASTER_CODE) {
-          throw new Error("Código de acesso administrativo inválido. Você não tem permissão para criar contas.");
+          throw new Error("Código de acesso administrativo inválido. Verifique a variável ADMIN_CODE.");
         }
 
         // Fix: Cast auth to any to bypass missing type definition for signUp
@@ -143,7 +144,7 @@ export const Login: React.FC = () => {
                   />
                 </div>
                 <p className="text-[11px] text-gray-500 mt-1 leading-tight">
-                  Para evitar registros externos não autorizados, digite o código de instalação: <strong>ADMIN2024</strong>
+                  Para registrar, use o código definido nas variáveis de ambiente (ADMIN_CODE).
                 </p>
               </div>
             )}

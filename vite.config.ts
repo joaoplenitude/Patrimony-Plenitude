@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
       'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      'process.env.ADMIN_CODE': JSON.stringify(env.ADMIN_CODE),
     },
     build: {
       chunkSizeWarningLimit: 1000,
