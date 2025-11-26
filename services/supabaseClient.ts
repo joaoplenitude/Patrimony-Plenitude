@@ -2,26 +2,26 @@ import { createClient } from '@supabase/supabase-js';
 
 // Função segura para ler configuração
 const getConfig = (key: string, storageKey: string) => {
-  // 1. Tenta ler variáveis injetadas pelo Vite (define no vite.config.ts)
-  // O acesso direto via process.env.NOME_DA_VAR é necessário para a substituição funcionar
+  // 1. Tenta variáveis substituídas pelo Vite no build
   if (key === 'SUPABASE_URL' && process.env.SUPABASE_URL) return process.env.SUPABASE_URL;
   if (key === 'SUPABASE_ANON_KEY' && process.env.SUPABASE_ANON_KEY) return process.env.SUPABASE_ANON_KEY;
-  
-  // 2. Fallback para verificação genérica (caso não tenha sido substituído)
-  const envVal = process.env[key] || (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]);
-  if (envVal) return envVal;
-  
-  // 3. Fallback para localStorage (configuração manual via tela de Setup)
+
+  // 2. Tenta import.meta.env (compatível com Vite)
+  const metaEnv = (import.meta as any).env?.[key];
+  if (metaEnv) return metaEnv;
+
+  // 3. Fallback para localStorage (config manual no navegador)
   if (typeof window !== 'undefined') {
     return localStorage.getItem(storageKey);
   }
-  
+
   return null;
 };
 
 const supabaseUrl = getConfig('SUPABASE_URL', 'sb_url');
 const supabaseAnonKey = getConfig('SUPABASE_ANON_KEY', 'sb_key');
 
+// Validação de URL
 const isValidUrl = (u: string | null): u is string => {
   try {
     if (!u) return false;
@@ -36,3 +36,4 @@ const isValidUrl = (u: string | null): u is string => {
 export const supabase = isValidUrl(supabaseUrl) && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+  

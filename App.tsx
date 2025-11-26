@@ -8,13 +8,11 @@ import { GlobalAssetList } from './components/GlobalAssetList';
 import { AddAssetModal } from './components/AddAssetModal';
 import { DashboardStats } from './components/DashboardStats';
 import { ConfirmModal } from './components/ConfirmModal';
-import { generateAuditReport } from './services/geminiService';
 import { 
   Users, 
   Search, 
   UserPlus, 
   Plus, 
-  FileText,
   ChevronDown,
   ChevronUp,
   PackageOpen,
@@ -27,14 +25,13 @@ import {
 
 type ViewMode = 'users' | 'assets';
 
-// Logic for Pending Actions (Deletion)
 type PendingAction = 
   | { type: 'DELETE_USER'; userId: string }
   | { type: 'DELETE_ASSET'; userId: string; assetId: string }
   | null;
 
 function App() {
-  // 0. Safety Check: If Supabase isn't configured, show setup screen
+  // Se Supabase não estiver configurado, mostra tela de setup
   if (!supabase) {
     return <SupabaseSetup />;
   }
@@ -49,31 +46,22 @@ function App() {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('users');
   
-  // Modal States
   const [isAssetModalOpen, setAssetModalOpen] = useState(false);
   const [selectedUserIdForAsset, setSelectedUserIdForAsset] = useState<string | null>(null);
   
-  // Confirmation Modal State
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   
-  // New User Form State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserUser, setNewUserUser] = useState('');
 
-  // AI Report State
-  const [auditReport, setAuditReport] = useState<string | null>(null);
-  const [generatingReport, setGeneratingReport] = useState(false);
-
-  // 1. Auth Setup
+  // Auth
   useEffect(() => {
-    // Fix: Cast auth to any to bypass missing type definition for getSession
     (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
       setSession(session);
       setIsLoadingSession(false);
     });
 
-    // Fix: Cast auth to any to bypass missing type definition for onAuthStateChange
     const {
       data: { subscription },
     } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
@@ -83,12 +71,11 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Data Fetching
+  // Busca colaboradores + assets
   const fetchData = async () => {
     if (!session) return;
     setLoadingData(true);
     
-    // Fetch Collaborators
     const { data: collaboratorsData, error: collabError } = await supabase
       .from('collaborators')
       .select('*');
@@ -99,7 +86,6 @@ function App() {
       return;
     }
 
-    // Fetch Assets
     const { data: assetsData, error: assetsError } = await supabase
       .from('assets')
       .select('*');
@@ -110,7 +96,6 @@ function App() {
       return;
     }
 
-    // Map DB Structure to App Structure
     const mappedUsers: User[] = collaboratorsData.map((collab: any) => {
       const userAssets = assetsData
         .filter((a: any) => a.collaborator_id === collab.id)
@@ -142,7 +127,6 @@ function App() {
   }, [session]);
 
   const handleLogout = async () => {
-    // Fix: Cast auth to any to bypass missing type definition for signOut
     await (supabase.auth as any).signOut();
   };
 
@@ -157,24 +141,21 @@ function App() {
     if (error) {
       alert('Erro ao criar colaborador: ' + error.message);
     } else {
-      fetchData(); // Refresh list
+      fetchData();
       setNewUserName('');
       setNewUserUser('');
       setIsAddUserOpen(false);
     }
   };
 
-  // Trigger Delete User Flow
   const requestDeleteUser = (userId: string) => {
     setPendingAction({ type: 'DELETE_USER', userId });
   };
 
-  // Trigger Delete Asset Flow
   const requestDeleteAsset = (userId: string, assetId: string) => {
     setPendingAction({ type: 'DELETE_ASSET', userId, assetId });
   };
 
-  // Execute Confirmation
   const handleConfirmAction = async () => {
     if (!pendingAction) return;
 
@@ -234,20 +215,12 @@ function App() {
     if (error) {
       alert('Erro ao adicionar equipamento: ' + error.message);
     } else {
-      fetchData(); // Refresh to get the generated ID
+      fetchData();
     }
   };
 
   const toggleUserExpand = (userId: string) => {
     setExpandedUserId(prev => prev === userId ? null : userId);
-  };
-
-  const generateReport = async () => {
-    setGeneratingReport(true);
-    const dataSummary = users.map(u => `${u.fullName} (${u.username}): ${u.assets.length} items (${u.assets.map(a => a.category).join(', ')})`).join('\n');
-    const report = await generateAuditReport(dataSummary);
-    setAuditReport(report);
-    setGeneratingReport(false);
   };
 
   const filteredUsers = users.filter(u => 
@@ -277,17 +250,11 @@ function App() {
             <div className="bg-brand-600 text-white p-2 rounded-lg">
               <PackageOpen size={24} />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight hidden sm:block">Patrimonio<span className="text-brand-600">AI</span></h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight hidden sm:block">
+              Patrimonio<span className="text-brand-600">AI</span>
+            </h1>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={generateReport}
-              className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-brand-600 px-3 py-2 rounded-md hover:bg-brand-50 transition-colors"
-            >
-              {generatingReport ? <div className="animate-spin w-4 h-4 border-2 border-brand-600 border-t-transparent rounded-full"/> : <FileText size={18} />}
-              {generatingReport ? 'Gerando...' : 'Auditoria IA'}
-            </button>
-            <div className="h-6 w-px bg-gray-300 mx-1"></div>
             <div className="flex items-center gap-2">
                <span className="text-xs text-gray-500 hidden sm:inline">{session.user.email}</span>
                <button 
@@ -314,23 +281,9 @@ function App() {
             {/* Dashboard Stats */}
             <DashboardStats users={users} />
 
-            {/* AI Report Section */}
-            {auditReport && (
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl border border-indigo-100 mb-8 animate-fade-in shadow-sm">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-indigo-900 font-bold flex items-center gap-2"><FileText size={18}/> Relatório de Auditoria IA</h3>
-                    <button onClick={() => setAuditReport(null)} className="text-indigo-400 hover:text-indigo-700 text-xs">Fechar</button>
-                </div>
-                <p className="text-indigo-800 text-sm leading-relaxed whitespace-pre-line">{auditReport}</p>
-              </div>
-            )}
-
             {/* Controls & Navigation */}
             <div className="flex flex-col gap-6 mb-6">
-              {/* Top Controls: View Toggle and Search */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                
-                {/* View Switcher Tabs */}
                 <div className="bg-gray-200 p-1 rounded-lg inline-flex">
                   <button 
                     onClick={() => setViewMode('users')}
@@ -377,7 +330,7 @@ function App() {
               </div>
             </div>
 
-            {/* Add User Form (Collapsible) */}
+            {/* Add User Form */}
             {isAddUserOpen && (
               <form onSubmit={handleAddUser} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-6 animate-fade-in">
                 <h3 className="font-semibold text-gray-800 mb-4">Cadastrar Novo Responsável</h3>
@@ -423,16 +376,14 @@ function App() {
               </form>
             )}
 
-            {/* Main Content Area */}
+            {/* Main Content */}
             {viewMode === 'assets' ? (
-              /* All Assets View */
               <GlobalAssetList 
                 users={users} 
                 onRemoveAsset={requestDeleteAsset} 
                 search={search} 
               />
             ) : (
-              /* User List View */
               <div className="space-y-4">
                 {filteredUsers.length === 0 ? (
                   <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
@@ -444,18 +395,30 @@ function App() {
                   </div>
                 ) : (
                   filteredUsers.map((user) => (
-                    <div key={user.id} className={`bg-white rounded-xl border transition-all duration-200 overflow-hidden ${expandedUserId === user.id ? 'border-brand-300 ring-4 ring-brand-50 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}>
-                      {/* User Header Card */}
+                    <div 
+                      key={user.id} 
+                      className={`bg-white rounded-xl border transition-all duration-200 overflow-hidden ${
+                        expandedUserId === user.id 
+                          ? 'border-brand-300 ring-4 ring-brand-50 shadow-md' 
+                          : 'border-gray-200 shadow-sm hover:border-gray-300'
+                      }`}
+                    >
                       <div 
                         className="p-4 sm:px-6 flex items-center justify-between cursor-pointer select-none"
                         onClick={() => toggleUserExpand(user.id)}
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${expandedUserId === user.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                            expandedUserId === user.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+                          }`}>
                             {user.fullName.charAt(0)}
                           </div>
                           <div>
-                            <h3 className={`font-semibold text-base ${expandedUserId === user.id ? 'text-brand-700' : 'text-gray-900'}`}>{user.fullName}</h3>
+                            <h3 className={`font-semibold text-base ${
+                              expandedUserId === user.id ? 'text-brand-700' : 'text-gray-900'
+                            }`}>
+                              {user.fullName}
+                            </h3>
                             <div className="flex items-center text-xs text-gray-500 gap-2">
                               <span className="flex items-center gap-1"><Briefcase size={12}/> {user.username}</span>
                               <span>•</span>
@@ -475,7 +438,6 @@ function App() {
                             <Plus size={14} /> Adicionar
                           </button>
                           
-                          {/* Delete User Button */}
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -488,15 +450,20 @@ function App() {
                             <Trash2 size={18} />
                           </button>
 
-                          {expandedUserId === user.id ? <ChevronUp className="text-gray-400" size={20} /> : <ChevronDown className="text-gray-400" size={20} />}
+                          {expandedUserId === user.id ? (
+                            <ChevronUp className="text-gray-400" size={20} />
+                          ) : (
+                            <ChevronDown className="text-gray-400" size={20} />
+                          )}
                         </div>
                       </div>
 
-                      {/* Expanded Assets Section */}
                       {expandedUserId === user.id && (
                         <div className="border-t border-gray-100 bg-gray-50/50 p-4 sm:px-6 animate-fade-in-down">
                           <div className="flex justify-between items-center mb-3 sm:hidden">
-                            <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Equipamentos</h4>
+                            <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                              Equipamentos
+                            </h4>
                             <button 
                               onClick={() => openAssetModal(user.id)}
                               type="button"
