@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Loader2, Plus } from 'lucide-react';
-import { analyzeAsset } from '../services/geminiService';
 import { Asset } from '../types';
 
 interface AddAssetModalProps {
