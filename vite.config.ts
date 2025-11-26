@@ -1,17 +1,15 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
+// Configuração oficial e funcional para Render (Site Estático)
 export default defineConfig(({ mode }) => {
-  // Carrega variáveis de ambiente do sistema (Render) ou arquivo .env
-  // O terceiro parâmetro '' permite carregar variáveis que não começam com VITE_
+  // Carrega variáveis de ambiente (Render + .env)
   const env = loadEnv(mode, '.', '');
 
   return {
     plugins: [react()],
-    // Define variáveis globais para substituição em tempo de build.
-    // Isso é essencial para Sites Estáticos no Render, pois não há servidor Node rodando.
     define: {
+      // Embed das variáveis no bundle (Render não tem process.env em runtime)
       'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
@@ -20,27 +18,8 @@ export default defineConfig(({ mode }) => {
     build: {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
-        // Mantém a estratégia de usar CDN (ImportMap) para reduzir tamanho do bundle
-        // e evitar erros de dependências ausentes no ambiente de build.
-        external: [
-          'react',
-          'react-dom',
-          'react-dom/client', // CRITICO: Deve estar listado aqui para usar o CDN
-          'recharts',
-          '@supabase/supabase-js',
-          '@google/genai',
-          'lucide-react'
-        ],
         output: {
-          format: 'es', 
-          globals: {
-            react: 'React',
-            'react-dom': 'ReactDOM',
-            recharts: 'Recharts',
-            '@supabase/supabase-js': 'supabase',
-            '@google/genai': 'googleGenai',
-            'lucide-react': 'lucide'
-          }
+          format: 'es'
         }
       }
     }
