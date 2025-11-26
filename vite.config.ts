@@ -5,7 +5,6 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   // Carrega variáveis de ambiente do sistema (Render) ou arquivo .env
   // O terceiro parâmetro '' permite carregar variáveis que não começam com VITE_
-  // Fix: Use '.' instead of process.cwd() to avoid TS error about missing process types
   const env = loadEnv(mode, '.', '');
 
   return {
@@ -22,10 +21,11 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         // Mantém a estratégia de usar CDN (ImportMap) para reduzir tamanho do bundle
-        // e evitar erros de dependências ausentes (como react-is) no ambiente de build.
+        // e evitar erros de dependências ausentes no ambiente de build.
         external: [
           'react',
           'react-dom',
+          'react-dom/client', // CRITICO: Deve estar listado aqui para usar o CDN
           'recharts',
           '@supabase/supabase-js',
           '@google/genai',
