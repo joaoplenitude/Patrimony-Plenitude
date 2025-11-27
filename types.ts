@@ -1,22 +1,17 @@
 export interface Asset {
   id: string;
-  assetTag: string; // Mapeado de asset_tag
+  assetTag: string;              // asset_tag
   name: string;
   category: string;
-  description: string;
-  acquisitionDate: string; // Mapeado de acquisition_date
-  collaborator_id?: string; // Foreign key
+  description?: string;          // opcional
+  acquisitionDate?: string;      // acquisition_date opcional
+  collaborator_id: string | null; // agora pode ser null (sem responsável)
+  status: 'ativo' | 'desativado';
 }
 
 export interface User {
   id: string;
-  fullName: string; // Mapeado de full_name
+  fullName: string;   // full_name
   username: string;
   assets: Asset[];
-}
-
-export interface AIAnalysisResult {
-  category: string;
-  suggestedDescription: string;
-  estimatedValueTier: 'Low' | 'Medium' | 'High';
 }

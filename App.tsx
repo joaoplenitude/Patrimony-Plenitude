@@ -8,11 +8,13 @@ import { GlobalAssetList } from './components/GlobalAssetList';
 import { AddAssetModal } from './components/AddAssetModal';
 import { DashboardStats } from './components/DashboardStats';
 import { ConfirmModal } from './components/ConfirmModal';
-import { 
-  Users, 
-  Search, 
-  UserPlus, 
-  Plus, 
+import { EditAssetModal } from './components/EditAssetModal';
+
+import {
+  Users,
+  Search,
+  UserPlus,
+  Plus,
   ChevronDown,
   ChevronUp,
   PackageOpen,
@@ -25,94 +27,103 @@ import {
 
 type ViewMode = 'users' | 'assets';
 
-type PendingAction = 
+type PendingAction =
   | { type: 'DELETE_USER'; userId: string }
-  | { type: 'DELETE_ASSET'; userId: string; assetId: string }
+  | { type: 'DELETE_ASSET'; userId: string | null; assetId: string }
   | null;
 
 function App() {
-  // Se Supabase não estiver configurado, mostra tela de setup
-  if (!supabase) {
-    return <SupabaseSetup />;
-  }
+  if (!supabase) return <SupabaseSetup />;
 
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
-  
+
   const [users, setUsers] = useState<User[]>([]);
+  const [unassignedAssets, setUnassignedAssets] = useState<Asset[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  
+
   const [search, setSearch] = useState('');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('users');
-  
+
   const [isAssetModalOpen, setAssetModalOpen] = useState(false);
-  const [selectedUserIdForAsset, setSelectedUserIdForAsset] = useState<string | null>(null);
-  
+  const [selectedUserIdForAsset, setSelectedUserIdForAsset] =
+    useState<string | null>(null);
+
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  
+
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserUser, setNewUserUser] = useState('');
 
-  // Auth
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+
+  // AUTH
   useEffect(() => {
-    (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
-      setSession(session);
-      setIsLoadingSession(false);
-    });
+    (supabase.auth as any)
+      .getSession()
+      .then(({ data: { session } }: any) => {
+        setSession(session);
+        setIsLoadingSession(false);
+      });
 
     const {
-      data: { subscription },
-    } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
-      setSession(session);
-    });
+      data: { subscription }
+    } = (supabase.auth as any).onAuthStateChange(
+      (_event: any, session: any) => setSession(session)
+    );
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Busca colaboradores + assets
+  // FETCH DATA
   const fetchData = async () => {
     if (!session) return;
     setLoadingData(true);
-    
-    const { data: collaboratorsData, error: collabError } = await supabase
+
+    const { data: collaboratorsData } = await supabase
       .from('collaborators')
       .select('*');
 
-    if (collabError) {
-      console.error('Error fetching collaborators:', collabError);
-      setLoadingData(false);
-      return;
-    }
+    const { data: assetsData } = await supabase.from('assets').select('*');
 
-    const { data: assetsData, error: assetsError } = await supabase
-      .from('assets')
-      .select('*');
+    // UNASSIGNED
+    const unassigned = assetsData
+      .filter((a) => a.collaborator_id === null)
+      .map((a: any) => ({
+        id: a.id,
+        assetTag: a.asset_tag,
+        name: a.name,
+        category: a.category,
+        description: a.description ?? '',
+        acquisitionDate: a.acquisition_date ?? null,
+        collaborator_id: null,
+        status: (a.status as 'ativo' | 'desativado') ?? 'ativo'
+      }));
 
-    if (assetsError) {
-      console.error('Error fetching assets:', assetsError);
-      setLoadingData(false);
-      return;
-    }
+    setUnassignedAssets(unassigned);
 
+    // USERS + ASSETS
     const mappedUsers: User[] = collaboratorsData.map((collab: any) => {
-      const userAssets = assetsData
-        .filter((a: any) => a.collaborator_id === collab.id)
+      const items = assetsData
+        .filter((a) => a.collaborator_id === collab.id)
         .map((a: any) => ({
           id: a.id,
           assetTag: a.asset_tag,
           name: a.name,
           category: a.category,
-          description: a.description,
-          acquisitionDate: a.acquisition_date
+          description: a.description ?? '',
+          acquisitionDate: a.acquisition_date ?? null,
+          collaborator_id: a.collaborator_id,
+          status: (a.status as 'ativo' | 'desativado') ?? 'ativo'
         }));
 
       return {
         id: collab.id,
         fullName: collab.full_name,
         username: collab.username,
-        assets: userAssets
+        assets: items
       };
     });
 
@@ -121,185 +132,205 @@ function App() {
   };
 
   useEffect(() => {
-    if (session) {
-      fetchData();
-    }
+    if (session) fetchData();
   }, [session]);
 
+  // LOGOUT
   const handleLogout = async () => {
     await (supabase.auth as any).signOut();
   };
 
+  // ADD USER
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(!newUserName || !newUserUser) return;
-    
-    const { error } = await supabase
-      .from('collaborators')
-      .insert([{ full_name: newUserName, username: newUserUser }]);
 
-    if (error) {
-      alert('Erro ao criar colaborador: ' + error.message);
-    } else {
-      fetchData();
-      setNewUserName('');
-      setNewUserUser('');
-      setIsAddUserOpen(false);
-    }
+    const { error } = await supabase.from('collaborators').insert([
+      {
+        full_name: newUserName,
+        username: newUserUser
+      }
+    ]);
+
+    if (error) return alert(error.message);
+
+    setNewUserName('');
+    setNewUserUser('');
+    setIsAddUserOpen(false);
+    fetchData();
   };
 
+  // DELETE USER OR ASSET
   const requestDeleteUser = (userId: string) => {
     setPendingAction({ type: 'DELETE_USER', userId });
   };
 
-  const requestDeleteAsset = (userId: string, assetId: string) => {
+  const requestDeleteAsset = (userId: string | null, assetId: string) => {
     setPendingAction({ type: 'DELETE_ASSET', userId, assetId });
   };
 
   const handleConfirmAction = async () => {
     if (!pendingAction) return;
 
-    if (pendingAction.type === 'DELETE_USER') {
-      const { error } = await supabase
-        .from('collaborators')
-        .delete()
-        .eq('id', pendingAction.userId);
-      
-      if (error) alert('Erro ao excluir: ' + error.message);
-      else {
-        setUsers(prev => prev.filter(u => u.id !== pendingAction.userId));
-        if (expandedUserId === pendingAction.userId) setExpandedUserId(null);
-      }
-    } 
-    else if (pendingAction.type === 'DELETE_ASSET') {
+    if (pendingAction.type === 'DELETE_ASSET') {
       const { error } = await supabase
         .from('assets')
         .delete()
         .eq('id', pendingAction.assetId);
 
-      if (error) alert('Erro ao excluir: ' + error.message);
-      else {
-        setUsers(prev => prev.map(user => {
-          if (user.id === pendingAction.userId) {
-            return {
-              ...user,
-              assets: user.assets.filter(a => a.id !== pendingAction.assetId)
-            };
-          }
-          return user;
-        }));
-      }
+      if (error) alert(error.message);
+      else fetchData();
     }
+
+    if (pendingAction.type === 'DELETE_USER') {
+      const { error } = await supabase
+        .from('collaborators')
+        .delete()
+        .eq('id', pendingAction.userId);
+
+      if (error) alert(error.message);
+      else fetchData();
+    }
+
     setPendingAction(null);
   };
 
-  const openAssetModal = (userId: string) => {
-    setSelectedUserIdForAsset(userId);
-    setAssetModalOpen(true);
-  };
+  // ADD ASSET
+  const handleAddAsset = async (
+    assetData: Omit<Asset, 'id' | 'collaborator_id'>
+  ) => {
+    const acquisitionDateValue =
+      assetData.acquisitionDate?.trim() !== '' &&
+      assetData.acquisitionDate !== null
+        ? assetData.acquisitionDate
+        : null;
 
-  const handleAddAsset = async (assetData: Omit<Asset, 'id'>) => {
-    if (!selectedUserIdForAsset) return;
-
-    const { error } = await supabase
-      .from('assets')
-      .insert([{
-        collaborator_id: selectedUserIdForAsset,
+    const { error } = await supabase.from('assets').insert([
+      {
+        collaborator_id: selectedUserIdForAsset ?? null,
         name: assetData.name,
         asset_tag: assetData.assetTag,
         category: assetData.category,
-        description: assetData.description,
-        acquisition_date: assetData.acquisitionDate
-      }]);
+        description: assetData.description ?? '',
+        acquisition_date: acquisitionDateValue,
+        status: assetData.status
+      }
+    ]);
 
-    if (error) {
-      alert('Erro ao adicionar equipamento: ' + error.message);
-    } else {
+    if (error) alert(error.message);
+    else fetchData();
+  };
+
+  // --- ABRIR MODAL DE NOVO EQUIPAMENTO ---
+    const openAssetModal = (userId: string | null) => {
+      setSelectedUserIdForAsset(userId);
+      setAssetModalOpen(true);
+  };
+
+  // EDIT ASSET
+  const startEdit = (asset: Asset) => {
+    setEditingAsset(asset);
+    setEditModalOpen(true);
+  };
+
+  const handleSaveAsset = async (asset: Asset) => {
+    const { error } = await supabase
+      .from('assets')
+      .update({
+        name: asset.name,
+        asset_tag: asset.assetTag,
+        category: asset.category,
+        description: asset.description ?? '',
+        acquisition_date: asset.acquisitionDate || null,
+        status: asset.status,
+        collaborator_id: asset.collaborator_id ?? null
+      })
+      .eq('id', asset.id);
+
+    if (error) alert(error.message);
+    else {
+      setEditModalOpen(false);
       fetchData();
     }
   };
 
-  const toggleUserExpand = (userId: string) => {
-    setExpandedUserId(prev => prev === userId ? null : userId);
-  };
-
-  const filteredUsers = users.filter(u => 
-    u.fullName.toLowerCase().includes(search.toLowerCase()) || 
-    u.username.toLowerCase().includes(search.toLowerCase()) ||
-    u.assets.some(a => a.assetTag.toLowerCase().includes(search.toLowerCase()))
+  // FILTER USERS
+  const filteredUsers = users.filter(
+    (u) =>
+      u.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      u.username.toLowerCase().includes(search.toLowerCase()) ||
+      u.assets.some((a) =>
+        a.assetTag.toLowerCase().includes(search.toLowerCase())
+      )
   );
 
-  if (isLoadingSession) {
+  if (isLoadingSession)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-brand-600 w-10 h-10" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin w-10 h-10 text-brand-600" />
       </div>
     );
-  }
 
-  if (!session) {
-    return <Login />;
-  }
+  if (!session) return <Login />;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
+      {/* HEADER */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="bg-brand-600 text-white p-2 rounded-lg">
               <PackageOpen size={24} />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight hidden sm:block">
+            <h1 className="text-xl font-bold text-gray-900 hidden sm:block">
               Patrimonio<span className="text-brand-600">AI</span>
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-               <span className="text-xs text-gray-500 hidden sm:inline">{session.user.email}</span>
-               <button 
-                 onClick={handleLogout}
-                 className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                 title="Sair"
-               >
-                 <LogOut size={18} />
-               </button>
-            </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 hidden sm:inline">
+              {session.user.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+      {/* CONTENT */}
+      <main className="max-w-4xl mx-auto px-4 py-8">
         {loadingData ? (
-           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-             <Loader2 size={40} className="animate-spin mb-4 text-brand-500" />
-             <p>Carregando base de dados...</p>
-           </div>
+          <div className="flex flex-col items-center py-20 text-gray-500">
+            <Loader2 className="animate-spin w-10 h-10 mb-3" />
+            Carregando...
+          </div>
         ) : (
           <>
-            {/* Dashboard Stats */}
             <DashboardStats users={users} />
 
-            {/* Controls & Navigation */}
+            {/* FILTERS + SEARCH */}
             <div className="flex flex-col gap-6 mb-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="bg-gray-200 p-1 rounded-lg inline-flex">
-                  <button 
+                  <button
                     onClick={() => setViewMode('users')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                      viewMode === 'users' 
-                        ? 'bg-white text-gray-900 shadow-sm' 
+                    className={`px-4 py-2 text-sm rounded-md ${
+                      viewMode === 'users'
+                        ? 'bg-white shadow'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     <Users size={16} /> Colaboradores
                   </button>
-                  <button 
+
+                  <button
                     onClick={() => setViewMode('assets')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                      viewMode === 'assets' 
-                        ? 'bg-white text-gray-900 shadow-sm' 
+                    className={`px-4 py-2 text-sm rounded-md ${
+                      viewMode === 'assets'
+                        ? 'bg-white shadow'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
@@ -309,203 +340,198 @@ function App() {
 
                 <button
                   onClick={() => setIsAddUserOpen(!isAddUserOpen)}
-                  className="flex items-center gap-2 bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm w-full sm:w-auto justify-center"
+                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow hover:bg-black"
                 >
-                  <UserPlus size={18} />
-                  Novo Responsável
+                  <UserPlus size={18} /> Novo Responsável
                 </button>
               </div>
 
-              <div className="relative w-full">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Search size={18} />
-                </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 text-gray-400" />
                 <input
                   type="text"
-                  placeholder={viewMode === 'users' ? "Buscar usuário ou patrimônio..." : "Buscar equipamento, categoria ou responsável..."}
+                  className="w-full pl-10 border border-gray-300 rounded-lg py-2"
+                  placeholder="Buscar..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:placeholder-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 sm:text-sm shadow-sm"
                 />
               </div>
             </div>
 
-            {/* Add User Form */}
-            {isAddUserOpen && (
-              <form onSubmit={handleAddUser} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-6 animate-fade-in">
-                <h3 className="font-semibold text-gray-800 mb-4">Cadastrar Novo Responsável</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Nome Completo</label>
-                    <input
-                      required
-                      type="text"
-                      value={newUserName}
-                      onChange={(e) => setNewUserName(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                      placeholder="Ex: João da Silva"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Nome de Usuário (ID)</label>
-                    <input
-                      required
-                      type="text"
-                      value={newUserUser}
-                      onChange={(e) => setNewUserUser(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                      placeholder="Ex: jsilva"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setIsAddUserOpen(false)}
-                    className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    type="submit"
-                    className="px-4 py-2 text-sm bg-brand-600 text-white hover:bg-brand-700 rounded-md font-medium"
-                  >
-                    Salvar Usuário
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Main Content */}
-            {viewMode === 'assets' ? (
-              <GlobalAssetList 
-                users={users} 
-                onRemoveAsset={requestDeleteAsset} 
-                search={search} 
-              />
-            ) : (
+            {/* USERS VIEW */}
+            {viewMode === 'users' ? (
               <div className="space-y-4">
-                {filteredUsers.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                    <div className="mx-auto h-12 w-12 text-gray-300 mb-3">
-                      <Users size={48} strokeWidth={1} />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900">Nenhum resultado encontrado</h3>
-                    <p className="text-gray-500">Tente buscar por outro termo ou adicione um novo usuário.</p>
-                  </div>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <div 
-                      key={user.id} 
-                      className={`bg-white rounded-xl border transition-all duration-200 overflow-hidden ${
-                        expandedUserId === user.id 
-                          ? 'border-brand-300 ring-4 ring-brand-50 shadow-md' 
-                          : 'border-gray-200 shadow-sm hover:border-gray-300'
-                      }`}
-                    >
-                      <div 
-                        className="p-4 sm:px-6 flex items-center justify-between cursor-pointer select-none"
-                        onClick={() => toggleUserExpand(user.id)}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                            expandedUserId === user.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {user.fullName.charAt(0)}
-                          </div>
-                          <div>
-                            <h3 className={`font-semibold text-base ${
-                              expandedUserId === user.id ? 'text-brand-700' : 'text-gray-900'
-                            }`}>
-                              {user.fullName}
-                            </h3>
-                            <div className="flex items-center text-xs text-gray-500 gap-2">
-                              <span className="flex items-center gap-1"><Briefcase size={12}/> {user.username}</span>
-                              <span>•</span>
-                              <span>{user.assets.length} {user.assets.length === 1 ? 'item' : 'itens'}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openAssetModal(user.id);
-                            }}
-                            type="button"
-                            className="hidden sm:flex items-center gap-1 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-full transition-colors"
-                          >
-                            <Plus size={14} /> Adicionar
-                          </button>
-                          
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDeleteUser(user.id);
-                            }}
-                            type="button"
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                            title="Remover Colaborador"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                {isAddUserOpen && (
+                  <form
+                    onSubmit={handleAddUser}
+                    className="bg-white p-6 rounded-xl border shadow-sm"
+                  >
+                    <h3 className="font-semibold mb-4">
+                      Cadastrar Novo Responsável
+                    </h3>
 
-                          {expandedUserId === user.id ? (
-                            <ChevronUp className="text-gray-400" size={20} />
-                          ) : (
-                            <ChevronDown className="text-gray-400" size={20} />
-                          )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-gray-600">Nome</label>
+                        <input
+                          required
+                          className="w-full border rounded-lg px-3 py-2"
+                          value={newUserName}
+                          onChange={(e) => setNewUserName(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-gray-600">Usuário</label>
+                        <input
+                          required
+                          className="w-full border rounded-lg px-3 py-2"
+                          value={newUserUser}
+                          onChange={(e) => setNewUserUser(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-gray-600"
+                        onClick={() => setIsAddUserOpen(false)}
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-brand-600 text-white rounded-lg"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {filteredUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    className={`bg-white border rounded-xl shadow transition ${
+                      expandedUserId === user.id
+                        ? 'border-brand-400 shadow-md'
+                        : 'hover:border-gray-300'
+                    }`}
+                  >
+                    <div
+                      onClick={() =>
+                        setExpandedUserId(
+                          expandedUserId === user.id ? null : user.id
+                        )
+                      }
+                      className="p-4 flex justify-between cursor-pointer"
+                    >
+                      <div className="flex gap-4">
+                        <div className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-600 rounded-full">
+                          {user.fullName[0]}
+                        </div>
+
+                        <div>
+                          <h3 className="font-semibold">{user.fullName}</h3>
+                          <p className="text-xs text-gray-500 flex gap-2">
+                            <Briefcase size={12} /> {user.username}
+                          </p>
                         </div>
                       </div>
 
-                      {expandedUserId === user.id && (
-                        <div className="border-t border-gray-100 bg-gray-50/50 p-4 sm:px-6 animate-fade-in-down">
-                          <div className="flex justify-between items-center mb-3 sm:hidden">
-                            <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                              Equipamentos
-                            </h4>
-                            <button 
-                              onClick={() => openAssetModal(user.id)}
-                              type="button"
-                              className="text-xs font-semibold text-brand-600 flex items-center gap-1"
-                            >
-                              <Plus size={14} /> Adicionar
-                            </button>
-                          </div>
-                          
-                          <AssetList 
-                            assets={user.assets} 
-                            onRemove={(assetId) => requestDeleteAsset(user.id, assetId)} 
-                          />
-                        </div>
+                      {expandedUserId === user.id ? (
+                        <ChevronUp />
+                      ) : (
+                        <ChevronDown />
                       )}
                     </div>
-                  ))
-                )}
+
+                    {expandedUserId === user.id && (
+                      <div className="p-4 border-t bg-gray-50">
+                        <AssetList
+                          assets={user.assets}
+                          onRemove={(assetId) =>
+                            requestDeleteAsset(user.id, assetId)
+                          }
+                          onEdit={startEdit}
+                        />
+
+                        <button
+                          onClick={() => openAssetModal(user.id)}
+                          className="flex items-center gap-2 mt-4 bg-brand-600 text-white px-4 py-2 rounded-lg shadow hover:bg-brand-700"
+                        >
+                          <Plus size={16} /> Adicionar Equipamento
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
+            ) : (
+              // ALL ASSETS VIEW
+              <>
+                <button
+                  onClick={() => {
+                    setSelectedUserIdForAsset(null);
+                    setAssetModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 mb-6 bg-brand-600 text-white px-4 py-2 rounded-lg shadow hover:bg-brand-700"
+                >
+                  <Plus size={18} /> Novo Equipamento (Sem responsável)
+                </button>
+
+                <GlobalAssetList
+                  users={users}
+                  unassignedAssets={unassignedAssets}
+                  search={search}
+                  onRemoveAsset={requestDeleteAsset}
+                  onEdit={startEdit}
+                />
+              </>
             )}
           </>
         )}
       </main>
 
+      {/* MODALS */}
       <AddAssetModal
         isOpen={isAssetModalOpen}
         onClose={() => setAssetModalOpen(false)}
         onAdd={handleAddAsset}
-        userName={users.find(u => u.id === selectedUserIdForAsset)?.fullName || ''}
+        userName={
+          users.find((u) => u.id === selectedUserIdForAsset)?.fullName || null
+        }
       />
 
-      <ConfirmModal 
+      <EditAssetModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        asset={editingAsset}
+        onSave={handleSaveAsset}
+      />
+
+      <ConfirmModal
         isOpen={!!pendingAction}
         onClose={() => setPendingAction(null)}
         onConfirm={handleConfirmAction}
         isDestructive={true}
-        title={pendingAction?.type === 'DELETE_USER' ? "Remover Colaborador" : "Remover Equipamento"}
-        message={pendingAction?.type === 'DELETE_USER' 
-          ? "Tem certeza que deseja remover este colaborador? Todos os equipamentos vinculados serão excluídos permanentemente do banco de dados." 
-          : "Tem certeza que deseja remover este equipamento do sistema?"
+        title={
+          pendingAction?.type === 'DELETE_USER'
+            ? 'Remover Colaborador'
+            : 'Remover Equipamento'
         }
-        confirmLabel={pendingAction?.type === 'DELETE_USER' ? "Excluir Colaborador" : "Excluir Item"}
+        message={
+          pendingAction?.type === 'DELETE_USER'
+            ? 'Tem certeza que deseja remover este colaborador? Isso removerá todos os equipamentos vinculados.'
+            : 'Tem certeza que deseja remover este equipamento?'
+        }
+        confirmLabel={
+          pendingAction?.type === 'DELETE_USER'
+            ? 'Excluir Colaborador'
+            : 'Excluir Item'
+        }
       />
     </div>
   );

@@ -65,7 +65,7 @@ export const Login: React.FC = () => {
             <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 text-white backdrop-blur-sm shadow-lg">
               <ShieldCheck size={32} />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">PatrimonioAI</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Pleni Patrimony</h1>
             <p className="text-brand-100 mt-2 text-sm font-medium">
               {isSignUp ? 'Cadastro Restrito de Admin' : 'Acesso Seguro Administrativo'}
             </p>
