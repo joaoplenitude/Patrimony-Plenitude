@@ -282,7 +282,7 @@ function App() {
               <PackageOpen size={24} />
             </div>
             <h1 className="text-xl font-bold text-gray-900 hidden sm:block">
-              Patrimonio<span className="text-brand-600">AI</span>
+              Plenitude<span className="text-brand-600">PMP</span>
             </h1>
           </div>
 
