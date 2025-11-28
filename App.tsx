@@ -9,6 +9,8 @@ import { AddAssetModal } from './components/AddAssetModal';
 import { DashboardStats } from './components/DashboardStats';
 import { ConfirmModal } from './components/ConfirmModal';
 import { EditAssetModal } from './components/EditAssetModal';
+import { TransferAssetModal } from './components/TransferAssetModal';
+import { exportAssetsToExcel } from "./utils/exportExcel";
 
 import {
   Users,
@@ -58,6 +60,44 @@ function App() {
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [assetToTransfer, setAssetToTransfer] = useState<Asset | null>(null);
+
+// 🔥🔥🔥 MOVIDO PARA FORA DO fetchData()
+  const getAllAssetsFlattened = () => {
+    const assigned = users.flatMap(user =>
+      user.assets.map(asset => ({
+        id: asset.id,
+        name: asset.name,
+        tag: asset.assetTag,
+        category: asset.category,
+        description: asset.description,
+        acquisitionDate: asset.acquisitionDate,
+        status: asset.status,
+        responsavel: user.fullName
+      }))
+    );
+
+    const unassigned = unassignedAssets.map(asset => ({
+      id: asset.id,
+      name: asset.name,
+      tag: asset.assetTag,
+      category: asset.category,
+      description: asset.description,
+      acquisitionDate: asset.acquisitionDate,
+      status: asset.status,
+      responsavel: "Sem responsável"
+    }));
+
+    return [...assigned, ...unassigned];
+  };
+
+  // 🔥🔥🔥 MOVIDO PARA FORA TAMBÉM
+  const handleExportExcel = () => {
+    const allAssets = getAllAssetsFlattened();
+    exportAssetsToExcel(allAssets);
+  };
 
   // AUTH
   useEffect(() => {
@@ -130,10 +170,28 @@ function App() {
     setUsers(mappedUsers);
     setLoadingData(false);
   };
-
+  
   useEffect(() => {
     if (session) fetchData();
   }, [session]);
+  
+  const startTransfer = (asset: Asset) => {
+    setAssetToTransfer(asset);
+    setTransferModalOpen(true);
+  };
+  
+  const handleTransferAsset = async (assetId: string, newUserId: string | null) => {
+  const { error } = await supabase
+      .from("assets")
+      .update({ collaborator_id: newUserId })
+      .eq("id", assetId);
+  
+    if (!error) {
+      fetchData();
+    } else {
+      alert("Erro ao transferir: " + error.message);
+    }
+  };
 
   // LOGOUT
   const handleLogout = async () => {
@@ -159,51 +217,52 @@ function App() {
     fetchData();
   };
 
+  
   // DELETE USER OR ASSET
   const requestDeleteUser = (userId: string) => {
     setPendingAction({ type: 'DELETE_USER', userId });
   };
-
+  
   const requestDeleteAsset = (userId: string | null, assetId: string) => {
     setPendingAction({ type: 'DELETE_ASSET', userId, assetId });
   };
-
+  
   const handleConfirmAction = async () => {
     if (!pendingAction) return;
-
+    
     if (pendingAction.type === 'DELETE_ASSET') {
       const { error } = await supabase
-        .from('assets')
-        .delete()
-        .eq('id', pendingAction.assetId);
-
+      .from('assets')
+      .delete()
+      .eq('id', pendingAction.assetId);
+      
       if (error) alert(error.message);
       else fetchData();
     }
-
+    
     if (pendingAction.type === 'DELETE_USER') {
       const { error } = await supabase
-        .from('collaborators')
-        .delete()
-        .eq('id', pendingAction.userId);
-
+      .from('collaborators')
+      .delete()
+      .eq('id', pendingAction.userId);
+      
       if (error) alert(error.message);
       else fetchData();
     }
-
+    
     setPendingAction(null);
   };
-
+  
   // ADD ASSET
   const handleAddAsset = async (
     assetData: Omit<Asset, 'id' | 'collaborator_id'>
   ) => {
     const acquisitionDateValue =
-      assetData.acquisitionDate?.trim() !== '' &&
-      assetData.acquisitionDate !== null
-        ? assetData.acquisitionDate
-        : null;
-
+    assetData.acquisitionDate?.trim() !== '' &&
+    assetData.acquisitionDate !== null
+    ? assetData.acquisitionDate
+    : null;
+    
     const { error } = await supabase.from('assets').insert([
       {
         collaborator_id: selectedUserIdForAsset ?? null,
@@ -215,65 +274,65 @@ function App() {
         status: assetData.status
       }
     ]);
-
+    
     if (error) alert(error.message);
     else fetchData();
   };
-
+  
   // --- ABRIR MODAL DE NOVO EQUIPAMENTO ---
-    const openAssetModal = (userId: string | null) => {
-      setSelectedUserIdForAsset(userId);
-      setAssetModalOpen(true);
+  const openAssetModal = (userId: string | null) => {
+    setSelectedUserIdForAsset(userId);
+    setAssetModalOpen(true);
   };
-
+  
   // EDIT ASSET
   const startEdit = (asset: Asset) => {
     setEditingAsset(asset);
     setEditModalOpen(true);
   };
-
+  
   const handleSaveAsset = async (asset: Asset) => {
     const { error } = await supabase
-      .from('assets')
-      .update({
-        name: asset.name,
-        asset_tag: asset.assetTag,
-        category: asset.category,
-        description: asset.description ?? '',
+    .from('assets')
+    .update({
+      name: asset.name,
+      asset_tag: asset.assetTag,
+      category: asset.category,
+      description: asset.description ?? '',
         acquisition_date: asset.acquisitionDate || null,
         status: asset.status,
         collaborator_id: asset.collaborator_id ?? null
       })
       .eq('id', asset.id);
-
+      
     if (error) alert(error.message);
     else {
       setEditModalOpen(false);
       fetchData();
     }
   };
-
+  
   // FILTER USERS
   const filteredUsers = users.filter(
     (u) =>
       u.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      u.assets.some((a) =>
-        a.assetTag.toLowerCase().includes(search.toLowerCase())
-      )
-  );
+    u.username.toLowerCase().includes(search.toLowerCase()) ||
+    u.assets.some((a) =>
+      a.assetTag.toLowerCase().includes(search.toLowerCase())
+  )
+);
 
-  if (isLoadingSession)
-    return (
-      <div className="min-h-screen flex items-center justify-center">
+if (isLoadingSession)
+  return (
+<div className="min-h-screen flex items-center justify-center">
         <Loader2 className="animate-spin w-10 h-10 text-brand-600" />
       </div>
     );
-
-  if (!session) return <Login />;
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    
+    if (!session) return <Login />;
+    
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20">
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -293,7 +352,7 @@ function App() {
             <button
               onClick={handleLogout}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition"
-            >
+              >
               <LogOut size={18} />
             </button>
           </div>
@@ -330,20 +389,27 @@ function App() {
                     onClick={() => setViewMode('assets')}
                     className={`px-4 py-2 text-sm rounded-md ${
                       viewMode === 'assets'
-                        ? 'bg-white shadow'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
+                      ? 'bg-white shadow'
+                      : 'text-gray-600 hover:text-gray-900'
+                    }`}>
                     <List size={16} /> Todos Equipamentos
                   </button>
-                </div>
 
-                <button
-                  onClick={() => setIsAddUserOpen(!isAddUserOpen)}
-                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow hover:bg-black"
-                >
-                  <UserPlus size={18} /> Novo Responsável
-                </button>
+                </div>
+                <div className="p-1 rounded-lg inline-flex gap-2 ">
+                  <button
+                      onClick={handleExportExcel}
+                      className="flex items-center gap-2 mb-6 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow hover:bg-emerald-700">
+                      📤 Exportar Excel
+                  </button>
+
+                  <button
+                    onClick={() => setIsAddUserOpen(!isAddUserOpen)}
+                    className="flex items-center gap-2 mb-6 bg-gray-900 text-white px-4 py-2 rounded-lg shadow hover:bg-black"
+                  >
+                    <UserPlus size={18} /> Novo Responsável
+                  </button>
+                </div>
               </div>
 
               <div className="relative">
@@ -354,7 +420,7 @@ function App() {
                   placeholder="Buscar..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                />
+                  />
               </div>
             </div>
 
@@ -363,9 +429,10 @@ function App() {
               <div className="space-y-4">
                 {isAddUserOpen && (
                   <form
-                    onSubmit={handleAddUser}
-                    className="bg-white p-6 rounded-xl border shadow-sm"
+                  onSubmit={handleAddUser}
+                  className="bg-white p-6 rounded-xl border shadow-sm"
                   >
+            
                     <h3 className="font-semibold mb-4">
                       Cadastrar Novo Responsável
                     </h3>
@@ -378,7 +445,7 @@ function App() {
                           className="w-full border rounded-lg px-3 py-2"
                           value={newUserName}
                           onChange={(e) => setNewUserName(e.target.value)}
-                        />
+                          />
                       </div>
 
                       <div>
@@ -488,6 +555,7 @@ function App() {
                   search={search}
                   onRemoveAsset={requestDeleteAsset}
                   onEdit={startEdit}
+                  onTransfer={startTransfer}
                 />
               </>
             )}
@@ -532,7 +600,17 @@ function App() {
             ? 'Excluir Colaborador'
             : 'Excluir Item'
         }
+        
       />
+
+      <TransferAssetModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        asset={assetToTransfer}
+        users={users}
+        onTransfer={handleTransferAsset}
+      />
+
     </div>
   );
 }
